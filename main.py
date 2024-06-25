@@ -3,11 +3,12 @@ load_dotenv()
 
 import os
 from fastapi import FastAPI, HTTPException, Path
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_groq import ChatGroq
 from langchain_community.chat_message_histories import RedisChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain.pydantic_v1 import BaseModel, Field
+from langchain_core.output_parsers import StrOutputParser
 
 
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
@@ -33,14 +34,14 @@ def Chat_W_LLM(session_id, user_input):
                 "system",
                 """"You are a tour guide agent. Your company name is Tour Buddy AI, Use history to generate different responses""",
             ),
-            # MessagesPlaceholder(variable_name="history"),
+            MessagesPlaceholder(variable_name="history"),
             ("human", "{input}"),
         ]
     )
 
     llm = ChatGroq(temperature=0, groq_api_key=GROQ_API_KEY, model_name="mixtral-8x7b-32768")
 
-    runnable = prompt | llm.with_structured_output(schema=Response)
+    runnable = prompt | llm
 
 
     with_message_history = RunnableWithMessageHistory(
@@ -49,15 +50,15 @@ def Chat_W_LLM(session_id, user_input):
         input_messages_key="input",
         history_messages_key="history",
         )
+    
+    full_chain = with_message_history | StrOutputParser()
 
-    response = with_message_history.invoke(
+    response = full_chain.invoke(
         {"input": user_input},
         config={"configurable": {"session_id": session_id}},
     )
 
-    # response = runnable.invoke({"ability" : ability, "input" : user_input})
-    # print(response)
-    return response.answer
+    return response
 
 
 @app.post("/QueryBot/{session_id}/{input}")
